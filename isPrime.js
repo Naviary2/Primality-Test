@@ -23,6 +23,12 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+// NOTE TO MYSELF, Naviary: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// The chance for false positive probablyPrimes are "astronomically low",
+// but can even be exponentially MORE reduced by modifying getAdaptiveNumRounds() to do more checks,
+// (larger numbers need less tests to achieve the same accuracy)
+// To prevent the extremely rare case of 2 players having different Huygen legal moves,
+// use a seeded RNG, where the seed is the game ID or similar.
 
 
 // Some useful BigInt constants
@@ -297,6 +303,8 @@ function validateBases(bases, nSub) {
  *    If `bases` is specified but is not an array, a TypeError will be thrown.
  *   - `findDivisor` is a boolean specifying whether to calculate and return a divisor of `n` in certain cases where this is
  *    easily possible (not guaranteed). Set this to false to avoid extra calculations if a divisor is not needed. Defaults to `true`.
+ *   - `small_determinism_mode` is a boolean specifying whether the primality test should run deterministically for small bases.
+ *    This is about 10% faster for when when enabled.
  * @returns {Promise<PrimalityResult>} A result object containing properties
  *   - `n` (the input value, as a BigInt),
  *   - `probablePrime` (true if all the primality tests passed, false otherwise),
@@ -305,7 +313,7 @@ function validateBases(bases, nSub) {
  */
 function primalityTest(
   n,
-  { numRounds = undefined, bases = undefined, findDivisor = true } = {}
+  { numRounds = undefined, bases = undefined, findDivisor = true, small_determinism_mode = false } = {}
 ) {
   return new Promise((resolve, reject) => {
     try {
@@ -353,6 +361,24 @@ function primalityTest(
           })
         )
         return
+      } else if (small_determinism_mode && n < 341550071728321n) {
+        // These numbers are found at: https://github.com/alpertron/calculators/blob/master/isprime.c 
+        // And that link got it from here: https://oeis.org/A014233 
+        if (n < 2047n) {
+          bases = [2]
+        } else if (n < 1373653n) {
+          bases = [2,3]
+        } else if (n < 25326001n) {
+          bases = [2,3,5]
+        } else if (n < 3215031751n) {
+          bases = [2,3,5,7]
+        } else if (n < 2152302898747n) {
+          bases = [2,3,5,7,11]
+        } else if (n < 3474749660383n) {
+          bases = [2,3,5,7,11,13]
+        } else {
+          bases = [2,3,5,7,11,13,17]
+        }
       }
 
       const nBits = bitLength(n)
@@ -482,9 +508,8 @@ function getAdaptiveNumRounds(inputBits) {
 }
 
 
-
-// just some testing below:
-let prime1 = 107;
+/*
+let prime1 = 0;
 let prime2 = BigInt("34260522533194312141699016768017376046579370858274371908475849");
 let prime3 = BigInt("24609615439855545007865829059894825853255339682863740988001");
 let largecomposite = prime2*prime3;
@@ -509,7 +534,13 @@ primalityTest(BigInt("10") ** BigInt("1000") + BigInt("13")).then((result) => {
   console.log("Stupidly large number is prime? " + result.probablePrime);
 });
 
+primalityTest(BigInt("341550071728319"), {small_determinism_mode: true}).then((result) => {
+  console.log("Small number is prime? " + result.probablePrime);
+});
 
+*/
+
+/*
 async function test_for_errors(){
   let erroramount = 0;
   let N_TESTS = 1000;
@@ -520,3 +551,15 @@ async function test_for_errors(){
   console.log("Number of false positives after " + N_TESTS + " tests: " + erroramount);
 }
 test_for_errors();
+*/
+
+async function speed_test(){
+  let N_START = 10n**9n;
+  let N_STEPS = 10n**5n;
+  let timer = Date.now();
+  for (let i = N_START; i< N_START + N_STEPS; i+= 1n){
+    await primalityTest(i);
+  }
+  console.log(`Time ellapsed: ${(Date.now()-timer)/1000}s`);
+}
+speed_test();
