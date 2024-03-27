@@ -362,7 +362,7 @@ function primalityTest(
         )
         return
       } else if (small_determinism_mode && n < 341550071728321n) {
-        // These numbers are found at: https://github.com/alpertron/calculators/blob/master/isprime.c 
+        // These numbers are found at, line 300: https://github.com/alpertron/calculators/blob/master/isprime.c 
         // And that link got it from here: https://oeis.org/A014233 
         if (n < 2047n) {
           bases = [2]
