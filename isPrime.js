@@ -558,7 +558,7 @@ async function speed_test(){
   let N_STEPS = 10n**5n;
   let timer = Date.now();
   for (let i = N_START; i< N_START + N_STEPS; i+= 1n){
-    await primalityTest(i);
+    await primalityTest(i, {small_determinism_mode: true});
   }
   console.log(`Time ellapsed: ${(Date.now()-timer)/1000}s`);
 }
