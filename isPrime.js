@@ -1,6 +1,6 @@
 /*
 Source: https://github.com/latonv/MillerRabinPrimality
-Compiled into a single executable Javascript file by Andreas Tsevas
+Adapted by Andreas Tsevas
 See attached license below:
 
 MIT License
@@ -30,13 +30,29 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // To prevent the extremely rare case of 2 players having different Huygen legal moves,
 // use a seeded RNG, where the seed is the game ID or similar.
 
+"use strict";
+
+const { bignumber } = require("mathjs");
 
 // Some useful BigInt constants
 const ZERO = 0n
 const ONE = 1n
 const TWO = 2n
 const FOUR = 4n
-const NEG_ONE = -1n
+const LOWER_LIMIT_MONTGOMMERY = 10n ** 30n
+
+// Useful int constants
+const LIMIT_2 = 2047
+const LIMIT_2_3 = 1373653
+const LIMIT_2_3_5 = 25326001
+const LIMIT_2_3_5_7 = 3215031751
+const LIMIT_2_3_5_7_11 = 2152302898747
+const LIMIT_2_3_5_7_11_13 = 3474749660383
+const LIMIT_2_3_5_7_11_13_17 = 341550071728321
+const SAFE_SQRT = Math.sqrt(Number.MAX_SAFE_INTEGER)
+
+// Bases for deterministic Miller-Rabin
+const BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
 
 /**
  * Calculates the inverse of `2^exp` modulo the given odd `base`.
@@ -200,18 +216,15 @@ function montgomeryPow(n, exp, ctx) {
 }
 
 /**
- * A record class to hold the results of primality testing.
+ * A record class to hold the result of primality testing.
  */
 class PrimalityResult {
   /**
    * Constructs a result object from the given options
    * @param {PrimalityResultOptions} options
    */
-  constructor({ n, probablePrime, witness = null, divisor = null }) {
-    this.n = n
+  constructor({ probablePrime }) {
     this.probablePrime = probablePrime
-    this.witness = witness
-    this.divisor = divisor
   }
 }
 
@@ -291,9 +304,162 @@ function validateBases(bases, nSub) {
 }
 
 /**
- * Runs Miller-Rabin primality tests on `n` using randomly-chosen bases, to determine with high probability whether `n` is a prime number.
+ * Computes (p1 * p2) mod modulus for numbers
+ * @param {Number} p1 - base
+ * @param {Number} p2 - base
+ * @param {Number} modulus - modulus
+ * @returns - return value: (p1 * p2) % modulus
+ */
+function modProductNumber (p1, p2, modulus) {
+  if (p1 > SAFE_SQRT || p2 > SAFE_SQRT){
+    return Number(( BigInt(p1)*BigInt(p2) ) % BigInt(modulus))
+  } else {
+    return (p1*p2) % modulus
+  }
+}
+
+/**
+ * Computes (base ^ 2) mod modulus for numbers
+ * @param {Number} base - base
+ * @param {Number} modulus - modulus
+ * @returns - return value: (base ** 2) % modulus
+ */
+function modSquaredNumber (base, modulus) {
+  if (base > SAFE_SQRT){
+    return Number(( BigInt(base)**TWO ) % BigInt(modulus))
+  } else {
+    return (base**2) % modulus
+  }
+}
+
+/**
+ * Computes (base ^ exponent) mod modulus for numbers, avoiding recursion because of large exponent
+ * @param {Number} base - base
+ * @param {Number} exponent - exponent
+ * @param {Number} modulus - modulus
+ * @returns - return value: (base ** exponent) % modulus
+ */
+function modPowNumber (base, exponent, modulus) {
+  let accumulator = 1
+  while (exponent != 0) {
+    if (exponent % 2 == 0) {
+      exponent = exponent / 2
+      base = modSquaredNumber(base, modulus)
+    } else {
+      exponent = exponent - 1
+      accumulator = modProductNumber(base, accumulator, modulus)
+    }
+  }
+  return accumulator
+}
+
+/**
+ * Computes (base ^ exponent) mod modulus for BigInts, avoiding recursion because of large exponent
+ * @param {bigint} base - base
+ * @param {bigint} exponent - exponent
+ * @param {bigint} modulus - modulus
+ * @returns - return value: (base ** exponent) % modulus
+ */
+function modPowBigint (base, exponent, modulus) {
+  let accumulator = ONE
+  while (exponent != ZERO) {
+    if (exponent % TWO == ZERO) {
+      exponent = exponent / TWO
+      base = (base**TWO) % modulus
+    } else {
+      exponent = exponent - ONE
+      accumulator = (base*accumulator) % modulus
+    }
+  }
+  return accumulator
+}
+
+/**
+ * Runs Miller-Rabin primality tests on `n` which can be either a number or a bigint.
+ * If `n` is a number or smaller than Number.MAX_SAFE_INTEGER, then primalityTestNumber() is called.
+ * If `n` is a bigint larger than Number.MAX_SAFE_INTEGER, then primalityTestBigint() is called.
+ * @param {BigIntResolvable} n - A number or bigint integer to be tested for primality.
+ * @param {PrimalityTestOptions?} optional_arguments - optional arguments passed along to primalityTestBigint() if necessary
+ * @returns {boolean} true if all the primality tests passed, false otherwise
+ */
+function primalityTest(n, optional_arguments = {}) {
+  if (typeof n !== "bigint") {
+    return primalityTestNumber(n)
+  } else {
+    if (n < Number.MAX_SAFE_INTEGER){
+      return primalityTestNumber(Number(n))
+    } else{
+      return primalityTestBigint(n, optional_arguments)
+    }
+  }
+}
+
+/**
+ * Runs deterministic Miller-Rabin primality test on number `n`
+ * @param {Number} n - A number be tested for primality.
+ * @returns {boolean} true if all the primality tests passed, false otherwise
+ */
+function primalityTestNumber(n){
+  let bases
+  // Handle some small special cases
+  if (n < 2) {
+    // n = 0 or 1
+    return false
+  } else if (n < 4) {
+    // n = 2 or 3
+    return true
+  } else if (n % 2 == 0) {
+    // Quick short-circuit for other even n
+    return false
+  } // See https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test#Testing_against_small_sets_of_bases
+  // and: https://oeis.org/A014233
+  else if (n < LIMIT_2) {
+    bases = BASES.slice(0, 1)
+  } else if (n < LIMIT_2_3) {
+    bases = BASES.slice(0, 2)
+  } else if (n < LIMIT_2_3_5) {
+    bases = BASES.slice(0, 3)
+  } else if (n < LIMIT_2_3_5_7) {
+    bases = BASES.slice(0, 4)
+  } else if (n < LIMIT_2_3_5_7_11) {
+    bases = BASES.slice(0, 5)
+  } else if (n < LIMIT_2_3_5_7_11_13) {
+    bases = BASES.slice(0, 6)
+  } else if (n < LIMIT_2_3_5_7_11_13_17){
+    bases = BASES.slice(0, 7)
+  } else{
+    bases = BASES.slice(0, 9)
+  }
+
+  let nSub = n - 1
+  let r = 0
+  let d = nSub
+  while (d % 2 == 0) {
+    d = d / 2
+    r += 1
+  }
+
+  for (let round = 0; round < bases.length; round++) {
+    let base = bases[round]
+    
+    // normal Miller-Rabin
+    let modularpower = modPowNumber(base, d, n)
+    if (modularpower != 1) {
+      for (let i = 0, x = modularpower;  x!= nSub; i += 1, x = modSquaredNumber(x,n)) {
+        if (i == r - 1) {
+          return false
+        }
+      }
+    }
+  }
+  
+  return true
+}
+
+/**
+ * Runs probabilistic Miller-Rabin primality tests on bigint `n` using randomly-chosen bases, to determine with high probability whether `n` is a prime number.
  *
- * @param {BigIntResolvable} n An integer (or string representation thereof) to be tested for primality.
+ * @param {bigint} n A Bigint integer to be tested for primality.
  * @param {PrimalityTestOptions?} options An object specifying the `numRounds` and/or `findDivisor` options.
  *   - `numRounds` is a positive integer specifying the number of random bases to test against.
  *    If none is provided, a reasonable number of rounds will be chosen automatically to balance speed and accuracy.
@@ -303,181 +469,142 @@ function validateBases(bases, nSub) {
  *    If `bases` is specified but is not an array, a TypeError will be thrown.
  *   - `findDivisor` is a boolean specifying whether to calculate and return a divisor of `n` in certain cases where this is
  *    easily possible (not guaranteed). Set this to false to avoid extra calculations if a divisor is not needed. Defaults to `true`.
- *   - `small_determinism_mode` is a boolean specifying whether the primality test should run deterministically for small bases.
- *    This is about 10% faster for when when enabled.
- * @returns {Promise<PrimalityResult>} A result object containing properties
- *   - `n` (the input value, as a BigInt),
- *   - `probablePrime` (true if all the primality tests passed, false otherwise),
- *   - `witness` (a BigInt witness for the compositeness of `n`, or null if none was found),
- *   - `divisor` (a BigInt divisor of `n`, or null if no such divisor was found)
+ *   - `useMontgomery` specifies whether the Montgomery reduction context for faster modular exponentiation should be used.
+ *     If left undefined, it is set automatically (recommended).
+ * @returns {boolean} true if all the primality tests passed, false otherwise
  */
-function primalityTest(
+function primalityTestBigint(
   n,
-  { numRounds = undefined, bases = undefined, findDivisor = true, small_determinism_mode = false } = {}
+{ numRounds = undefined, bases = undefined, findDivisor = true, useMontgomery = undefined} = {}
 ) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (typeof n !== "bigint") {
-        n = BigInt(n)
-      }
+  // Handle some small special cases
+  if (n < TWO) {
+    // n = 0 or 1
+    return false
+  } else if (n < FOUR) {
+    // n = 2 or 3
+    return true
+  } else if (!(n & ONE)) {
+    // Quick short-circuit for other even n
+    return false
+  }
 
-      // Ensure n is positive, but keep track of whether the input was originally negative
-      const sign = n < ZERO ? NEG_ONE : ONE // Just considering zero to have a positive sign, for simplicity's sake
-      if (sign === NEG_ONE) {
-        n = -n
-      }
+  const nBits = bitLength(n)
+  const nSub = n - ONE
 
-      // Handle some small special cases
-      if (n < TWO) {
-        // n = 0 or 1
-        resolve(
-          new PrimalityResult({
-            n: sign * n,
-            probablePrime: false,
-            witness: null,
-            divisor: null
-          })
-        )
-        return
-      } else if (n < FOUR) {
-        // n = 2 or 3
-        resolve(
-          new PrimalityResult({
-            n: sign * n,
-            probablePrime: true,
-            witness: null,
-            divisor: null
-          })
-        )
-        return
-      } else if (!(n & ONE)) {
-        // Quick short-circuit for other even n
-        resolve(
-          new PrimalityResult({
-            n: sign * n,
-            probablePrime: false,
-            witness: null,
-            divisor: TWO
-          })
-        )
-        return
-      } else if (small_determinism_mode && n < 341550071728321n) {
-        // These numbers are found at, line 300: https://github.com/alpertron/calculators/blob/master/isprime.c 
-        // And that link got it from here: https://oeis.org/A014233 
-        if (n < 2047n) {
-          bases = [2]
-        } else if (n < 1373653n) {
-          bases = [2,3]
-        } else if (n < 25326001n) {
-          bases = [2,3,5]
-        } else if (n < 3215031751n) {
-          bases = [2,3,5,7]
-        } else if (n < 2152302898747n) {
-          bases = [2,3,5,7,11]
-        } else if (n < 3474749660383n) {
-          bases = [2,3,5,7,11,13]
-        } else {
-          bases = [2,3,5,7,11,13,17]
-        }
-      }
+  // Represent n-1 as d * 2^r, with d odd
+  const r = twoMultiplicity(nSub) // Multiplicity of prime factor 2 in the prime factorization of n-1
+  const d = nSub >> r // The result of factoring out all powers of 2 from n-1
 
-      const nBits = bitLength(n)
-      const nSub = n - ONE
+  // Either use the user-provided list of bases to test against, or determine how many random bases to test
+  const validBases = validateBases(bases, nSub)
+  if (validBases != null) {
+    numRounds = validBases.length
+  } else if (numRounds == null || numRounds < 1) {
+    // If the number of testing rounds was not provided, pick a reasonable one based on the size of n
+    // Larger n have a vanishingly small chance to be falsely labelled probable primes, so we can balance speed and accuracy accordingly
+    numRounds = getAdaptiveNumRounds(nBits)
+  }
 
-      // Represent n-1 as d * 2^r, with d odd
-      const r = twoMultiplicity(nSub) // Multiplicity of prime factor 2 in the prime factorization of n-1
-      const d = nSub >> r // The result of factoring out all powers of 2 from n-1
+  let baseIndex = 0 // Only relevant if the user specified a list of bases to use
 
-      // Convert into a Montgomery reduction context for faster modular exponentiation
-      const reductionContext = getReductionContext(n)
-      const oneReduced = montgomeryReduce(ONE, reductionContext) // The number 1 in the reduction context
-      const nSubReduced = montgomeryReduce(nSub, reductionContext) // The number n-1 in the reduction context
-
-      // Either use the user-provided list of bases to test against, or determine how many random bases to test
-      const validBases = validateBases(bases, nSub)
-      if (validBases != null) {
-        numRounds = validBases.length
-      } else if (numRounds == null || numRounds < 1) {
-        // If the number of testing rounds was not provided, pick a reasonable one based on the size of n
-        // Larger n have a vanishingly small chance to be falsely labelled probable primes, so we can balance speed and accuracy accordingly
-        numRounds = getAdaptiveNumRounds(nBits)
-      }
-
-      let probablePrime = true
-      let witness = null
-      let divisor = null
-      let baseIndex = 0 // Only relevant if the user specified a list of bases to use
-
-      outer: for (let round = 0; round < numRounds; round++) {
-        let base
-        if (validBases != null) {
-          // Use the next user-specified base
-          base = validBases[baseIndex]
-          baseIndex++
-        } else {
-          // Select a random base to test
-          do {
-            base = BigInt("0b" + getRandomBitString(nBits))
-          } while (!(base >= TWO) || !(base < nSub)) // The base must lie within [2, n-2]
-        }
-
-        // Check whether the chosen base has any factors in common with n (if so, we can end early)
-        if (findDivisor) {
-          const gcd = ugcd(n, base)
-          if (gcd !== ONE) {
-            probablePrime = false
-            witness = base
-            divisor = gcd
-            break // Found a factor of n, so no need for further primality tests
-          }
-        }
-
-        const baseReduced = montgomeryReduce(base, reductionContext)
-        let x = montgomeryPow(baseReduced, d, reductionContext)
-        if (x === oneReduced || x === nSubReduced) continue // The test passed: base^d = +/-1 (mod n)
-
-        // Perform the actual Miller-Rabin loop
-        let i, y
-        for (i = ZERO; i < r; i++) {
-          y = montgomerySqr(x, reductionContext)
-
-          if (y === oneReduced) {
-            probablePrime = false // The test failed: base^(d*2^i) = 1 (mod n) and thus cannot be -1 for any i
-            witness = base // So this base is a witness to the guaranteed compositeness of n
-            if (findDivisor) {
-              divisor = ugcd(invMontgomeryReduce(x, reductionContext) - ONE, n)
-              if (divisor === ONE) divisor = null
-            }
-            break outer
-          } else if (y === nSubReduced) {
-            // The test passed: base^(d*2^i) = -1 (mod n) for the current i
-            // So n is a strong probable prime to this base (though n may still be composite)
-            break
-          }
-
-          x = y
-        }
-
-        // No value of i satisfied base^(d*2^i) = +/-1 (mod n)
-        // So this base is a witness to the guaranteed compositeness of n
-        if (i === r) {
-          probablePrime = false
-          witness = base
-          if (findDivisor) {
-            divisor = ugcd(invMontgomeryReduce(x, reductionContext) - ONE, n)
-            if (divisor === ONE) divisor = null
-          }
-          break
-        }
-      }
-
-      resolve(
-        new PrimalityResult({ n: sign * n, probablePrime, witness, divisor })
-      )
-    } catch (err) {
-      reject(err)
+  // if useMontgomery is not specified, it will be set according to the cutoff at LOWER_LIMIT_MONTGOMMERY
+  if (typeof useMontgomery === undefined){
+    if (n < LOWER_LIMIT_MONTGOMMERY){
+      useMontgomery = false
+    } else{
+      useMontgomery = true
     }
-  })
+  }
+
+  if (useMontgomery){
+    // Convert into a Montgomery reduction context for faster modular exponentiation
+    const reductionContext = getReductionContext(n)
+    const oneReduced = montgomeryReduce(ONE, reductionContext) // The number 1 in the reduction context
+    const nSubReduced = montgomeryReduce(nSub, reductionContext) // The number n-1 in the reduction context
+
+    for (let round = 0; round < numRounds; round++) {
+      let base
+      if (validBases != null) {
+        // Use the next user-specified base
+        base = validBases[baseIndex]
+        baseIndex++
+      } else {
+        // Select a random base to test
+        do {
+          base = BigInt("0b" + getRandomBitString(nBits))
+        } while (!(base >= TWO) || !(base < nSub)) // The base must lie within [2, n-2]
+      }
+
+      // Check whether the chosen base has any factors in common with n (if so, we can end early)
+      if (findDivisor) {
+        const gcd = ugcd(n, base)
+        if (gcd !== ONE) {
+          return false // Found a factor of n, so no need for further primality tests
+        }
+      }
+
+      const baseReduced = montgomeryReduce(base, reductionContext)
+      let x = montgomeryPow(baseReduced, d, reductionContext)
+      if (x === oneReduced || x === nSubReduced) continue // The test passed: base^d = +/-1 (mod n)
+
+      // Perform the actual Miller-Rabin loop
+      let i, y
+      for (i = ZERO; i < r; i++) {
+        y = montgomerySqr(x, reductionContext)
+
+        if (y === oneReduced) {
+          return false // The test failed: base^(d*2^i) = 1 (mod n) and thus cannot be -1 for any i
+        } else if (y === nSubReduced) {
+          // The test passed: base^(d*2^i) = -1 (mod n) for the current i
+          // So n is a strong probable prime to this base (though n may still be composite)
+          return true
+        }
+        x = y
+      }
+
+      // No value of i satisfied base^(d*2^i) = +/-1 (mod n)
+      // So this base is a witness to the guaranteed compositeness of n
+      if (i === r) {
+        return false
+      }
+    }
+    return true
+  } else{
+    // non-Montgommery case
+    for (let round = 0; round < numRounds; round++) {
+      let base
+      if (validBases != null) {
+        // Use the next user-specified base
+        base = validBases[baseIndex]
+        baseIndex++
+      } else {
+        // Select a random base to test
+        do {
+          base = BigInt("0b" + getRandomBitString(nBits))
+        } while (!(base >= TWO) || !(base < nSub)) // The base must lie within [2, n-2]
+      }
+
+      // Check whether the chosen base has any factors in common with n (if so, we can end early)
+      if (findDivisor) {
+        const gcd = ugcd(n, base)
+        if (gcd !== ONE) {
+          return false // Found a factor of n, so no need for further primality tests
+        }
+      }
+
+      // normal Miller-Rabin
+      let modularpower = modPowBigint(base, d, n)
+      if (modularpower != ONE) {
+        for (let i = ZERO, x = modularpower;  x!= nSub; i += ONE, x = (x**TWO) % n) {
+          if (i == r - ONE) {
+            return false
+          }
+        }
+      }
+    }
+    return true
+  }
 }
 
 /**
@@ -507,59 +634,78 @@ function getAdaptiveNumRounds(inputBits) {
   else return 6
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Everything below this line is only for testing purposes
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-let prime1 = 0;
+
+// Get the mathjs module via "npm install mathjs"
+let mathjs = require('mathjs');
+
+let prime1 = 11;
 let prime2 = BigInt("34260522533194312141699016768017376046579370858274371908475849");
 let prime3 = BigInt("24609615439855545007865829059894825853255339682863740988001");
+let prime4 = BigInt("10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000267");
 let largecomposite = prime2*prime3;
 
-primalityTest(prime1).then((result) => {
-  console.log(prime1 + " is prime? " + result.probablePrime);
-});
+function run_basic_tests(){
+  console.log("prime1 is prime? " + primalityTest(prime1));
+  console.log("prime2 is prime? " + primalityTest(prime2));
+  console.log("prime3 is prime? " + primalityTest(prime3));
+  console.log("prime4 is prime? " + primalityTest(prime4));
+  console.log("Product of prime2 and prime3 is prime? " + primalityTest(largecomposite));
+  console.log("Stupidly large composite is prime? " + primalityTest(BigInt("10") ** BigInt("1000") + BigInt("13")));
+}
+run_basic_tests();
 
-primalityTest(prime2).then((result) => {
-  console.log(prime2 + " is prime? " + result.probablePrime);
-});
-
-primalityTest(prime3).then((result) => {
-  console.log(prime3 + " is prime? " + result.probablePrime);
-});
-
-primalityTest(largecomposite).then((result) => {
-  console.log(largecomposite + " is prime? " + result.probablePrime);
-});
-
-primalityTest(BigInt("10") ** BigInt("1000") + BigInt("13")).then((result) => {
-  console.log("Stupidly large number is prime? " + result.probablePrime);
-});
-
-primalityTest(BigInt("341550071728319"), {small_determinism_mode: true}).then((result) => {
-  console.log("Small number is prime? " + result.probablePrime);
-});
-
-*/
-
-/*
-async function test_for_errors(){
+function test_for_errors(){
   let erroramount = 0;
   let N_TESTS = 1000;
   for (let i = 0; i< N_TESTS; i++){
-    let primality = await primalityTest(largecomposite);
-    if (primality.probablePrime) erroramount++;
+    if (primalityTest(largecomposite)) erroramount++;
   }
-  console.log("Number of false positives after " + N_TESTS + " tests: " + erroramount);
+  console.log("Consistency test. Number of false positives after " + N_TESTS + " tests: " + erroramount);
 }
-test_for_errors();
-*/
+test_for_errors(largecomposite);
 
-async function speed_test(){
-  let N_START = 10n**9n;
+function speed_test(){
+  let N_START = 10n**10n;
   let N_STEPS = 10n**5n;
   let timer = Date.now();
   for (let i = N_START; i< N_START + N_STEPS; i+= 1n){
-    await primalityTest(i, {small_determinism_mode: true});
+    primalityTest(i, {useMontgomery: false});
   }
-  console.log(`Time ellapsed: ${(Date.now()-timer)/1000}s`);
+  console.log(`Speed test. Time ellapsed: ${(Date.now()-timer)/1000}s`);
 }
 speed_test();
+
+function mathjs_speed_test(){
+  let N_START = 10**10;
+  let N_STEPS = 10**5;
+  let timer = Date.now();
+  for (let i = N_START; i< N_START + N_STEPS; i+= 1){
+    mathjs.isPrime(i);
+  }
+  console.log(`Mathjs speed test. Time ellapsed: ${(Date.now()-timer)/1000}s`);
+}
+mathjs_speed_test();
+
+// Test this program for correctness with mathjs library
+function test_program(){
+  let i = 10**12 + 1;
+  while(true) {
+    let isprime_thisprogram = primalityTest(i);
+    let isprime_mathjs = mathjs.isPrime(i);
+    if (isprime_thisprogram != isprime_mathjs){
+      console.log(`Program fails for number ${i}`);
+      console.log(isprime_thisprogram);
+      console.log(isprime_mathjs);
+      break;
+    } else if(i % 10000 == 0){
+      console.log(`Numbers up to ${i} tested`);
+    }
+    i += 1;
+  }
+}
+test_program();
+
