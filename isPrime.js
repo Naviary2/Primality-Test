@@ -38,6 +38,7 @@ const ONE = 1n
 const TWO = 2n
 const FOUR = 4n
 const LOWER_LIMIT_MONTGOMMERY = 10n ** 30n
+const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 // Useful int constants
 // See https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test#Testing_against_small_sets_of_bases
@@ -50,7 +51,6 @@ const LIMIT_2_3_5_7_11 = 2152302898747
 const LIMIT_2_3_5_7_11_13 = 3474749660383
 const LIMIT_2_3_5_7_11_13_17 = 341550071728321
 const SAFE_SQRT = Math.sqrt(Number.MAX_SAFE_INTEGER)
-const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 // Bases for deterministic Miller-Rabin
 const BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
