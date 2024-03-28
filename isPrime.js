@@ -25,9 +25,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Note to myself, Naviary: ----------------------------------------------------------------------
 // Anything above 341550071728321 has an extremely low probability of returning false positives.
-// As long as both players use the same seeded RNG, then this will never break games.
-// Chance of false positives can further be reduced by
-// modifying getAdaptiveNumRounds() to do more checks.
+// As long as both players use the same seeded RNG, then this will never break games if one
+// player's Huygen has different legal moves than the others.
+// The chance of false positives can further be reduced by modifying getAdaptiveNumRounds() to do more checks.
 // -----------------------------------------------------------------------------------------------
 
 "use strict";
