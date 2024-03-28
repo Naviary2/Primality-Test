@@ -43,6 +43,7 @@ const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 // Useful int constants
 // See https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test#Testing_against_small_sets_of_bases
 // and: https://oeis.org/A014233
+// and longer base lists: https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test#Deterministic_variants_of_the_test 
 const LIMIT_2 = 2047
 const LIMIT_2_3 = 1373653
 const LIMIT_2_3_5 = 25326001
@@ -365,7 +366,7 @@ function primalityTest(n, options) {
  * @param {Number} n - A number be tested for primality.
  * @returns {boolean} true if all the primality tests passed, false otherwise
  */
-function primalityTestNumber(n){
+function primalityTestNumber(n) {
   let bases
   // Handle some small special cases
   if (n < 2) return false // n = 0 or 1
@@ -391,7 +392,7 @@ function primalityTestNumber(n){
   for (let round = 0; round < bases.length; round++) {
     let base = bases[round]
     
-    // normal Miller-Rabin
+    // Normal Miller-Rabin method => FAST for smaller numbers!
     let modularpower = modPowNumber(base, d, n)
     if (modularpower != 1) {
       for (let i = 0, x = modularpower;  x!= nSub; i += 1, x = modSquaredNumber(x,n)) {
@@ -453,7 +454,7 @@ function primalityTestBigint(
     else useMontgomery = true
   }
 
-  if (useMontgomery) {
+  if (useMontgomery) { // Faster for larger numbers (like above 1e30)
     // Convert into a Montgomery reduction context for faster modular exponentiation
     const reductionContext = getReductionContext(n)
     const oneReduced = montgomeryReduce(ONE, reductionContext) // The number 1 in the reduction context
@@ -501,8 +502,7 @@ function primalityTestBigint(
       if (i === r) return false
     }
     return true
-  } else {
-    // non-Montgommery case
+  } else { // Use Miller-Robin method (faster for smaller numbers, like below 1e30)
     for (let round = 0; round < numRounds; round++) {
       let base
       if (validBases != null) {
