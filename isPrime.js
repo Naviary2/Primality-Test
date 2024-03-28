@@ -422,7 +422,7 @@ function primalityTestNumber(n){
  */
 function primalityTestBigint(
   n,
-{ numRounds = undefined, bases = undefined, findDivisor = true, useMontgomery} = {}
+{ numRounds, bases, findDivisor = true, useMontgomery} = {}
 ) {
   // Handle some small special cases
   if (n < TWO) return false // n = 0 or 1
@@ -448,7 +448,7 @@ function primalityTestBigint(
   let baseIndex = 0 // Only relevant if the user specified a list of bases to use
 
   // if useMontgomery is not specified, it will be set according to the cutoff at LOWER_LIMIT_MONTGOMMERY
-  if (useMontgomery === undefined){
+  if (useMontgomery === undefined) {
     if (n < LOWER_LIMIT_MONTGOMMERY) useMontgomery = false
     else useMontgomery = true
   }
