@@ -23,16 +23,14 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-// NOTE TO MYSELF, Naviary: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// The chance for false positive probablyPrimes are "astronomically low",
-// but can even be exponentially MORE reduced by modifying getAdaptiveNumRounds() to do more checks,
-// (larger numbers need less tests to achieve the same accuracy)
-// To prevent the extremely rare case of 2 players having different Huygen legal moves,
-// use a seeded RNG, where the seed is the game ID or similar.
+// Note to myself, Naviary: ----------------------------------------------------------------------
+// Anything above 341550071728321 has an extremely low probability of returning false positives.
+// As long as both players use the same seeded RNG, then this will never break games.
+// Chance of false positives can further be reduced by
+// modifying getAdaptiveNumRounds() to do more checks.
+// -----------------------------------------------------------------------------------------------
 
 "use strict";
-
-const { bignumber } = require("mathjs");
 
 // Some useful BigInt constants
 const ZERO = 0n
@@ -634,6 +632,7 @@ function getAdaptiveNumRounds(inputBits) {
   else return 6
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Everything below this line is only for testing purposes
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -707,5 +706,5 @@ function test_program(){
     i += 1;
   }
 }
-test_program();
+// test_program();
 
