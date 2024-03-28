@@ -50,6 +50,7 @@ const LIMIT_2_3_5_7_11 = 2152302898747
 const LIMIT_2_3_5_7_11_13 = 3474749660383
 const LIMIT_2_3_5_7_11_13_17 = 341550071728321
 const SAFE_SQRT = Math.sqrt(Number.MAX_SAFE_INTEGER)
+const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 // Bases for deterministic Miller-Rabin
 const BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
@@ -355,7 +356,7 @@ function primalityTest(n, options) {
   if (typeof n === 'number') return primalityTestNumber(n)
   else if (typeof n === 'string') n = BigInt(n);
 
-  if (n < Number.MAX_SAFE_INTEGER) return primalityTestNumber(Number(n))
+  if (n < MAX_SAFE_INTEGER_BIGINT) return primalityTestNumber(Number(n))
   return primalityTestBigint(n, options)
 }
 
