@@ -269,14 +269,13 @@ function ugcd(a, b) {
  */
 function validateBases(bases, nSub) {
   if (bases == null) return null
-  else if (Array.isArray(bases)) {
-    // Ensure all bases are valid BigInts within [2, n-2]
-    return bases.map(b => {
-      if (typeof b !== "bigint") b = BigInt(b)
-      if (!(b >= TWO) || !(b < nSub)) throw new RangeError(`invalid base (must be in the range [2, n-2]): ${b}`)
-      return b
-    })
-  } else throw new TypeError(`invalid bases option (must be an array)`)
+  if (!Array.isArray(bases)) throw new TypeError(`invalid bases option (must be an array)`);
+  // Ensure all bases are valid BigInts within [2, n-2]
+  return bases.map(b => {
+    if (typeof b !== "bigint") b = BigInt(b)
+    if (!(b >= TWO) || !(b < nSub)) throw new RangeError(`invalid base (must be in the range [2, n-2]): ${b}`)
+    return b
+  })
 }
 
 /**
