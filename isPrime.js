@@ -37,6 +37,7 @@ const ZERO = 0n
 const ONE = 1n
 const TWO = 2n
 const FOUR = 4n
+const LIMIT_DETERMINISM = 2n ** 64n
 const LOWER_LIMIT_MONTGOMMERY = 10n ** 30n
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
@@ -54,7 +55,11 @@ const LIMIT_2_3_5_7_11_13_17 = 341550071728321
 const SAFE_SQRT = Math.sqrt(Number.MAX_SAFE_INTEGER)
 
 // Bases for deterministic Miller-Rabin
-const BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
+// See https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test#Testing_against_small_sets_of_bases
+// and: https://oeis.org/A014233
+// and: https://miller-rabin.appspot.com/
+const INT_BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
+const BIGINT_BASES = [2n, 325n, 9375n, 28178n, 450775n, 9780504n, 1795265022n]
 
 /**
  * Calculates the inverse of `2^exp` modulo the given odd `base`.
@@ -372,14 +377,14 @@ function primalityTestNumber(n) {
   if (n < 2) return false // n = 0 or 1
   else if (n < 4) return true // n = 2 or 3
   else if (n % 2 == 0) return false // Quick short-circuit for other even n
-  else if (n < LIMIT_2) bases = BASES.slice(0, 1)
-  else if (n < LIMIT_2_3) bases = BASES.slice(0, 2)
-  else if (n < LIMIT_2_3_5) bases = BASES.slice(0, 3)
-  else if (n < LIMIT_2_3_5_7) bases = BASES.slice(0, 4)
-  else if (n < LIMIT_2_3_5_7_11) bases = BASES.slice(0, 5)
-  else if (n < LIMIT_2_3_5_7_11_13) bases = BASES.slice(0, 6)
-  else if (n < LIMIT_2_3_5_7_11_13_17) bases = BASES.slice(0, 7)
-  else bases = BASES.slice(0, 9)
+  else if (n < LIMIT_2) bases = INT_BASES.slice(0, 1)
+  else if (n < LIMIT_2_3) bases = INT_BASES.slice(0, 2)
+  else if (n < LIMIT_2_3_5) bases = INT_BASES.slice(0, 3)
+  else if (n < LIMIT_2_3_5_7) bases = INT_BASES.slice(0, 4)
+  else if (n < LIMIT_2_3_5_7_11) bases = INT_BASES.slice(0, 5)
+  else if (n < LIMIT_2_3_5_7_11_13) bases = INT_BASES.slice(0, 6)
+  else if (n < LIMIT_2_3_5_7_11_13_17) bases = INT_BASES.slice(0, 7)
+  else bases = INT_BASES.slice(0, 9)
 
   let nSub = n - 1
   let r = 0
@@ -429,6 +434,7 @@ function primalityTestBigint(
   if (n < TWO) return false // n = 0 or 1
   else if (n < FOUR) return true // n = 2 or 3
   else if (!(n & ONE)) return false // Quick short-circuit for other even n
+  else if (n < LIMIT_DETERMINISM) bases = BIGINT_BASES
 
   const nBits = bitLength(n)
   const nSub = n - ONE
