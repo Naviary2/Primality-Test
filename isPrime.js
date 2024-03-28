@@ -574,6 +574,7 @@ function getAdaptiveNumRounds(inputBits) {
 
 
 // Get the mathjs module via "npm install mathjs"
+/*
 let mathjs = require('mathjs');
 
 let prime1 = 11;
@@ -641,5 +642,5 @@ function test_program(){
     i += 1;
   }
 }
-// test_program();
-
+test_program();
+*/
